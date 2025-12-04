@@ -384,60 +384,72 @@ const tradeStatNames: { [key: number]: { [key: string]: string } } = {
   }
 };
 
-export const constructQuery = (jewel: number, conqueror: string, result: SearchWithSeed[]) => {
+export const constructQuery = (
+  jewel: number,
+  conqueror: string,
+  result: SearchWithSeed[]
+) => {
   const max_filter_length = 45;
   const max_filters = 4;
   const max_query_length = max_filter_length * max_filters;
-  const final_query = [];
-  const stat = {
+
+  // 這個是原本共用的 stat 模板
+  const statBase = {
     type: 'count',
     value: { min: 1 },
-    filters: [],
+    filters: [] as any[],
     disabled: false
   };
 
-  // single seed case
-  if (result.length == 1) {
-    for (const conq of Object.keys(tradeStatNames[jewel])) {
-      stat.filters.push({
-        id: tradeStatNames[jewel][conq],
-        value: {
-          min: result[0].seed,
-          max: result[0].seed
-        },
-        disabled: conq != conqueror
-      });
-    }
+  // 這顆 timeless jewel 對應的所有征服者（conqueror）名字
+  // 例如：['doryani', 'xibaqua', 'ahuana', 'something']
+  const allConquerors = Object.keys(tradeStatNames[jewel] || {});
+  // 最多只用 4 個（PoE Trade 這邊本來就限制 4 組）
+  const usedConquerors = allConquerors.slice(0, max_filters);
 
-    final_query.push(stat);
-    // too many results case
-  } else if (result.length > max_query_length) {
-    for (let i = 0; i < max_filters; i++) {
+  const final_query: any[] = [];
+
+  // ⬇ 單一 seed 的情況（按單筆結果的 Trade）
+  if (result.length === 1) {
+    for (const conq of usedConquerors) {
       final_query.push({
-        type: 'count',
-        value: { min: 1 },
-        filters: [],
-        disabled: i != 0
-      });
-    }
-
-    for (const [i, r] of result.slice(0, max_query_length).entries()) {
-      const index = Math.floor(i / max_filter_length);
-
-      final_query[index].filters.push({
-        id: tradeStatNames[jewel][conqueror],
-        value: {
-          min: r.seed,
-          max: r.seed
-        }
+        ...statBase,
+        filters: [
+          {
+            id: tradeStatNames[jewel][conq],
+            value: {
+              min: result[0].seed,
+              max: result[0].seed
+            }
+          }
+        ],
+        // 只有你在 UI 選的那個 Conqueror 是啟用，其它預設關閉
+        disabled: conq !== conqueror
       });
     }
   } else {
-    for (const conq of Object.keys(tradeStatNames[jewel])) {
-      stat.disabled = conq != conqueror;
+    // ⬇ 多筆 result 的情況（按 Trade All）
 
-      for (const r of result) {
-        stat.filters.push({
+    // 先建立「一個征服者一組 filter group」
+    for (const conq of usedConquerors) {
+      final_query.push({
+        ...statBase,
+        filters: [],
+        // 只有你選的那個 Conqueror 預設啟用，其餘是關掉的
+        disabled: conq !== conqueror
+      });
+    }
+
+    // 把 seed 分配進每個征服者各自的 group 裡
+    // 這裡採用「每個 seed 對每個征服者都建一個條件」，但每組最多 45 個
+    for (const r of result.slice(0, max_query_length)) {
+      for (let i = 0; i < final_query.length; i++) {
+        const conq = usedConquerors[i];
+
+        // 每個 group 最多 45 個 seed
+        if (final_query[i].filters.length >= max_filter_length) continue;
+
+        final_query[i].filters.push({
           id: tradeStatNames[jewel][conq],
           value: {
             min: r.seed,
@@ -445,12 +457,6 @@ export const constructQuery = (jewel: number, conqueror: string, result: SearchW
           }
         });
       }
-
-      if (stat.filters.length > max_filter_length) {
-        stat.filters = stat.filters.slice(0, max_filter_length);
-      }
-
-      final_query.push(stat);
     }
   }
 
