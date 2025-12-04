@@ -483,7 +483,7 @@ export const openTrade = (
   }
 
   const url = new URL(
-    `https://www.pathofexile.com/trade/search${platform === 'PC' ? '' : `/${platform.toLowerCase()}`}/${league}`
+    `https://www.pathofexile.tw/trade/search${platform === 'PC' ? '' : `/${platform.toLowerCase()}`}/${league}`
   );
   url.searchParams.set('q', JSON.stringify(constructQuery(jewel, conqueror, results)));
 
